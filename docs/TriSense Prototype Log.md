@@ -31,6 +31,26 @@ The first prototype will prove that a small wearable sensor pod can record usefu
 
 # Test Log
 
+## Build Prep — Components Arrived
+
+**Date:** 18 May 2026  
+**Parts received:** LiPo battery and microSD modules  
+**Parts pending:** XIAO nRF52840 Sense  
+**Work completed:** Initial Cirkit Designer wiring diagram created. microSD and battery checked visually.  
+**Notes:** First electronics tests will be USB-powered before using the LiPo battery.  
+**Next action:** Complete XIAO blink test when board arrives.
+
+## Prep Test — microSD FAT32 Format
+
+**Date:** 18 May 2026  
+**Aim:** Prepare the microSD card for Arduino/XIAO data logging.  
+**Setup:** 120GB microSD card formatted using GUIFormat.  
+**Result:** Card successfully formatted as FAT32 and labelled TRISENSE.  
+**Notes:** A README.txt file was added to confirm laptop read/write access.  
+**Next action:** Use this card for the first microSD write test once the XIAO arrives.
+
+
+
 ## Test 001 — IMU Serial Output
 
 **Date:**  
