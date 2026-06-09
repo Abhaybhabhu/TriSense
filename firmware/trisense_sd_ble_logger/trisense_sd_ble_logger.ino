@@ -1,10 +1,11 @@
 /*
-  TriSense Test 007 - SD + BLE IMU Logger
+  TriSense Test 008 - Fixed-Rate SD + BLE IMU Logger
 
   Purpose:
-  - Read acceleration and gyroscope data from XIAO nRF52840 Sense onboard IMU
-  - Save full-resolution timestamped data to microSD as CSV
-  - Send lower-rate live preview data to phone over BLE
+  - Log IMU data to microSD at approximately 20 Hz
+  - Send live BLE preview to phone at approximately 5 Hz
+  - Avoid Serial printing every sample to improve sample rate
+  - Flush SD every 1 second instead of every sample
 
   Wiring:
   SD 3V3  -> XIAO 3V3
@@ -13,13 +14,6 @@
   SD MOSI -> XIAO D10
   SD CLK  -> XIAO D8
   SD MISO -> XIAO D9
-
-  Phone:
-  - Use nRF Connect
-  - Scan for "TriSense"
-  - Connect
-  - Enable notifications on characteristic:
-    19B10001-E8F2-537E-4F6C-D104768A1214
 */
 
 #include <SPI.h>
@@ -34,13 +28,24 @@ LSM6DS3 myIMU(I2C_MODE, 0x6A);
 // ---------------- SD ----------------
 const int chipSelect = 5;
 File dataFile;
+const char fileName[] = "TRI_003.CSV";
 
 // ---------------- Timing ----------------
-const unsigned long sdIntervalMs = 50;    // 20 Hz SD logging
-const unsigned long bleIntervalMs = 200;  // 5 Hz BLE preview
+const unsigned long sdIntervalMs = 50;      // 20 Hz
+const unsigned long bleIntervalMs = 200;    // 5 Hz
+const unsigned long flushIntervalMs = 1000; // flush every 1 second
 
 unsigned long lastSdTime = 0;
 unsigned long lastBleTime = 0;
+unsigned long lastFlushTime = 0;
+
+// ---------------- Latest IMU values ----------------
+float ax = 0.0;
+float ay = 0.0;
+float az = 0.0;
+float gx = 0.0;
+float gy = 0.0;
+float gz = 0.0;
 
 // ---------------- BLE ----------------
 BLEService triSenseService("19B10000-E8F2-537E-4F6C-D104768A1214");
@@ -59,7 +64,8 @@ void setup() {
     delay(10);
   }
 
-  Serial.println("TriSense SD + BLE Logger starting...");
+  Serial.println("TriSense Test 008 starting...");
+  Serial.println("Fixed-rate SD + BLE IMU logger");
 
   // ---------- IMU setup ----------
   if (myIMU.begin() != 0) {
@@ -86,10 +92,10 @@ void setup() {
 
   Serial.println("microSD initialised.");
 
-  dataFile = SD.open("TRI_002.CSV", FILE_WRITE);
+  dataFile = SD.open(fileName, FILE_WRITE);
 
   if (!dataFile) {
-    Serial.println("ERROR: Failed to open TRI_002.CSV");
+    Serial.println("ERROR: Failed to open CSV file.");
     while (1) {
       delay(1000);
     }
@@ -98,7 +104,8 @@ void setup() {
   dataFile.println("time_ms,ax_g,ay_g,az_g,gx_dps,gy_dps,gz_dps");
   dataFile.flush();
 
-  Serial.println("Logging to TRI_002.CSV");
+  Serial.print("Logging to ");
+  Serial.println(fileName);
 
   // ---------- BLE setup ----------
   if (!BLE.begin()) {
@@ -114,36 +121,37 @@ void setup() {
     triSenseService.addCharacteristic(imuChar);
     BLE.addService(triSenseService);
 
-    imuChar.writeValue("TriSense SD+BLE ready");
+    imuChar.writeValue("TriSense fixed-rate logger ready");
 
     BLE.advertise();
 
     Serial.println("BLE advertising as TriSense");
   }
 
-  Serial.println("time_ms,ax_g,ay_g,az_g,gx_dps,gy_dps,gz_dps");
+  Serial.println("Setup complete.");
+  Serial.println("Serial sample printing disabled for better timing.");
 }
 
 void loop() {
   unsigned long now = millis();
 
-  // Keep BLE stack alive
+  // Keep BLE running
   if (bleStarted) {
     BLE.poll();
   }
 
-  // Read IMU every loop when needed
-  float ax = myIMU.readFloatAccelX();
-  float ay = myIMU.readFloatAccelY();
-  float az = myIMU.readFloatAccelZ();
-
-  float gx = myIMU.readFloatGyroX();
-  float gy = myIMU.readFloatGyroY();
-  float gz = myIMU.readFloatGyroZ();
-
   // ---------- SD logging at 20 Hz ----------
   if (now - lastSdTime >= sdIntervalMs) {
     lastSdTime = now;
+
+    // Read IMU only when logging a sample
+    ax = myIMU.readFloatAccelX();
+    ay = myIMU.readFloatAccelY();
+    az = myIMU.readFloatAccelZ();
+
+    gx = myIMU.readFloatGyroX();
+    gy = myIMU.readFloatGyroY();
+    gz = myIMU.readFloatGyroZ();
 
     dataFile.print(now);
     dataFile.print(",");
@@ -158,24 +166,6 @@ void loop() {
     dataFile.print(gy, 6);
     dataFile.print(",");
     dataFile.println(gz, 6);
-
-    // Flush every sample for safety during testing.
-    // Later we can flush less often to improve performance.
-    dataFile.flush();
-
-    Serial.print(now);
-    Serial.print(",");
-    Serial.print(ax, 6);
-    Serial.print(",");
-    Serial.print(ay, 6);
-    Serial.print(",");
-    Serial.print(az, 6);
-    Serial.print(",");
-    Serial.print(gx, 6);
-    Serial.print(",");
-    Serial.print(gy, 6);
-    Serial.print(",");
-    Serial.println(gz, 6);
   }
 
   // ---------- BLE preview at 5 Hz ----------
@@ -191,5 +181,11 @@ void loop() {
                  String(gz, 2);
 
     imuChar.writeValue(msg);
+  }
+
+  // ---------- Flush SD every 1 second ----------
+  if (now - lastFlushTime >= flushIntervalMs) {
+    lastFlushTime = now;
+    dataFile.flush();
   }
 }

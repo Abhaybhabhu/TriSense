@@ -126,6 +126,109 @@ The first prototype will prove that a small wearable sensor pod can record usefu
 
 **Next action:** Combine microSD logging and BLE preview in one sketch, with SD as the main data logger and BLE as a low-rate live diagnostic stream.
 
+## Test 007 — Combined SD + BLE IMU Logger
+
+**Date:** 20 May 2026  
+**Prototype version:** 0.1 Bench Test  
+**Aim:** Confirm that the XIAO nRF52840 Sense can record IMU data to microSD while simultaneously streaming lower-rate live data to a phone over BLE.
+
+**Setup:** XIAO powered over USB. microSD module connected over SPI with CS on D5. Phone connected using nRF Connect. IMU sampled and saved to CSV while BLE notifications sent live to phone.
+
+**Result:** Passed
+
+**What worked:** The system successfully saved timestamped acceleration and gyroscope data to the microSD card while also sending live IMU values to the phone over BLE.
+
+**What failed:** Earlier CS pins D7 and D6 were unreliable. D5 worked for combined SD and BLE logging.
+
+**Final working wiring:**  
+SD 3V3 → XIAO 3V3  
+SD GND → XIAO GND  
+SD CS → XIAO D5  
+SD MOSI → XIAO D10  
+SD CLK → XIAO D8  
+SD MISO → XIAO D9  
+
+**Next action:** Run controlled labelled movement tests to identify which IMU axes best represent roll, pitch and yaw movements.
+
+## Test 008 — Fixed-Rate SD + BLE Logger
+
+**Date:** 20 May 2026  
+**Prototype version:** 0.1 Bench Test  
+**Aim:** Improve the combined SD + BLE logger so that microSD logging is closer to the intended 20 Hz sample rate.
+
+**Setup:** XIAO nRF52840 Sense powered over USB, microSD module connected over SPI with CS on D5, BLE connected to phone using nRF Connect. Serial sample printing disabled and SD flushing reduced to once per second.
+
+**Result:** Passed
+
+**Measured performance:** 1367 samples recorded over approximately 72.0 seconds. Average sample interval was approximately 52.7 ms, giving an actual sample rate of approximately 19.0 Hz. Median sample interval was 50 ms.
+
+**What worked:** The logger successfully recorded IMU data to microSD while simultaneously streaming BLE preview data to the phone. Removing continuous Serial printing and reducing SD flush frequency significantly improved the sample rate.
+
+**What failed/limitations:** Occasional longer write intervals occurred, with the maximum interval around 113 ms. This is acceptable for the current prototype but may be improved later using buffered writing.
+
+**Next action:** Run the same movement test with the XIAO temporarily mounted on the lower back/waist area to identify the true body-roll axis for swimming-style motion.
+
+## Test 009 — Lower-Back Mounted Axis Test
+
+**Date:** 20 May 2026  
+**Prototype version:** 0.1 Breadboard Body-Mount Test  
+**Aim:** Identify which IMU axis best represents torso roll when the XIAO is positioned near the lower back.
+
+**Setup:** XIAO nRF52840 Sense and microSD module remained on the breadboard. The breadboard was positioned on the lower back while standing. Data was logged to microSD using the fixed-rate SD + BLE logger.
+
+**Movement sequence:** Roll left/right, lean forward/back, then tilt left/right twice while standing upright.
+
+**Result:** Passed
+
+**Measured performance:** 1654 samples recorded over approximately 88.2 seconds. Average sample interval was approximately 53.3 ms, giving an actual sample rate of approximately 18.75 Hz. Median sample interval was 50 ms.
+
+**Key finding:** With the current lower-back mounting orientation, torso roll is most strongly represented by `gx_dps`.
+
+**Interpretation:** `gx_dps` should be treated as the first candidate signal for swimming body-roll detection. Forward/back leaning is more visible through changes in `ax_g` and `az_g`, while side tilting is visible through `ay_g`.
+
+**Limitation:** The breadboard may move slightly relative to the body, so this axis mapping should be repeated once the electronics are fixed inside a case.
+
+
+## Test 010 — Offline Roll Signal Processing
+
+**Date:** 20 May 2026  
+**Prototype version:** 0.1 Breadboard Body-Mount Test  
+**Aim:** Process the lower-back IMU data offline to identify a usable roll signal and calculate an initial roll symmetry metric.
+
+**Setup:** Data from the lower-back mounted breadboard test was imported into MATLAB. The `gx_dps` signal was selected as the candidate body-roll axis based on Test 009. The signal was bias-corrected, smoothed using a moving average filter, and analysed using peak detection.
+
+**Processing steps:**
+1. Loaded the CSV file recorded by the TriSense SD + BLE logger.
+2. Converted `time_ms` into seconds.
+3. Removed the initial settling period.
+4. Selected `gx_dps` as the primary roll-axis signal.
+5. Estimated and removed gyro bias.
+6. Smoothed the signal using a moving average filter.
+7. Detected positive and negative roll peaks.
+8. Calculated an initial roll symmetry score.
+
+**Result:** Passed
+
+**Measured performance:**
+- Estimated sample rate: 20.00 Hz
+- Estimated gyro bias on `gx_dps`: 0.490 deg/s
+- Mean positive roll peak: 26.66 deg/s
+- Mean negative roll peak: 20.36 deg/s
+- Initial roll symmetry score: 0.764
+
+**Key finding:** The MATLAB processing pipeline successfully converted raw IMU data into a cleaned roll-axis signal and produced a basic left/right roll symmetry metric.
+
+**Interpretation:** A symmetry score of 0.764 suggests the positive and negative roll movements were reasonably similar but not perfectly balanced. However, this should not yet be interpreted as a true swimming technique score because the test was performed manually while standing with the electronics mounted on a breadboard.
+
+**Limitations:**
+- The breadboard may have shifted slightly relative to the body.
+- The movement was not a controlled swimming motion.
+- The analysis was applied to a manually performed motion sequence rather than repeated stroke cycles.
+- The peak detection method is basic and will need refinement later.
+
+**Next action:** Begin designing and manufacturing a simple waterproof enclosure so the electronics can be fixed rigidly in a repeatable body-mounted orientation.
+
+
 
 ## Test 002 — microSD Write Test
 
